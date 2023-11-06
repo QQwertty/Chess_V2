@@ -3,7 +3,6 @@ import time
 import numpy as np
 
 from ChessEngine import *
-from helper import *
 
 # Global Variables
 WINDOW_WIDTH = 800
@@ -297,14 +296,16 @@ while running:
                         # Redraws the updated board
                         graphical_board.remove_sprites()
                         graphical_board.place_pieces_from_board(chess_game.board)
-                        graphical_board.pawn_promote_selection(color)
+                        graphical_board.pawn_promote_selection(not chess_game.white_to_move)
                         pygame.display.update()
 
-                        graphical_board.promotion_loop(chess_game, new_rank, new_file, color)
-                    if chess_game.king_in_check(not color):
-                        if chess_game.king_in_checkmate(not color):
+                        graphical_board.promotion_loop(chess_game, new_rank, new_file, not chess_game.white_to_move)
+
+                    if chess_game.king_in_check(chess_game.white_to_move):
+                        if chess_game.king_in_checkmate(chess_game.white_to_move):
                             end = 1
-                    elif chess_game.is_stalemate(not color):
+
+                    elif chess_game.is_stalemate(chess_game.white_to_move):
                         end = 2
 
                     elif chess_game.is_threefold_repetition():
@@ -319,9 +320,9 @@ while running:
                 graphical_board.draw_graphical_board()
 
                 if end == 1: 
-                    graphical_board.end(color, screen, 1)
+                    graphical_board.end(not chess_game.white_to_move, screen, 1)
                 elif end == 2:
-                    graphical_board.end(color, screen, 2)
+                    graphical_board.end(not chess_game.white_to_move, screen, 2)
 
 
         # End loop if user exits

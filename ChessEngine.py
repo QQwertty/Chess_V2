@@ -41,16 +41,6 @@ int("0000100000000000000000000000000000000000000000000000000000000000", 2)
 empty_board = int("0000000000000000111111111111111111111111111111110000000000000000", 2)
 
 
-""" class Board(piece_bitboards, empty_board):
-    
-    def __init__(self):
-        self.piece_bitboards = piece_bitboards
-        self.turn = True # Player turn true = white false = black
-        self.start_pos = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" # Fen board representing starting position """
-        
-
-
-
 # Define function that prints a bitboard
 def print_bitboard(bitboard):
     board = '{:064b}'.format(bitboard)
@@ -70,26 +60,21 @@ class GameState():
         # Board is represented by 2D numpy array
         # White Pieces will be capital chars: P, R, N, B, K, Q
         # Black Pieces will be lowercase chars: p, r, n, b, k, q
-        self.board = np.array([[None, None, None, None, None, None, None, None], 
-                               [None, None, None, None, None, None, None, None], 
-                               [None, None, None, None, None, None, None, None],
-                               [None, None, None, None, None, None, None, None],
-                               [None, None, None, None, None, None, None, None], 
-                               [None, None, None, None, None, None, None, None], 
-                               [None, None, None, None, None, None, None, None],
-                               [None, None, None, None, None, None, None, None]])
-        self.white_to_move = True
+        self.board = np.array([[None] * 8 for _ in range(8)])
+        self.white_to_move = True # White's move -> True, Black's move -> False
         self.last_move = None # stored as [(x,y), piece_type, (x,y)]
         self.can_castle = "KQkq" # K means white can kingside castle, Q means black can queenside castle, etc.
-        self.starting_pos = "4k3/PR6/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-        self.white_promote = False
+        self.starting_pos = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        self.white_promote = False # Used to tell ChessMain to display options for promotion
         self.black_promote = False
         self.positions = {"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR KQkq": 1} # Used to check for 3-fold repetition
 
 
-    # Input FEN -> place pieces in the chess board
     def place_pieces_from_fen(self):
-
+        """
+        Takes an string representation of the chessboard in FEN notation and 
+        sets up the chess board array accordingly
+        """
         fen_board = self.starting_pos.split(" ")[0]
         file = 0
         rank = 0
@@ -108,63 +93,69 @@ class GameState():
 
                     file += 1
 
+
     def piece_matches_turn(self, rank, file):
         """
         Takes in the position (rank, file) of a piece
         outputs if that piece's color matches the turn to move (piece is white and it is white to move -> returns True)
         """
-        # Takes piece position and tells if that piece is white or not
-        piece_type = self.board[rank][file]
-        white = True if piece_type.isupper() else False
 
         # If both pieces are white or both pieces are not white (black) return true
-        if self.white_to_move == white:
-            return True
-        
-        return False
-
+        return self.white_to_move == self.board[rank][file].isupper()
 
 
     def make_move(self, old_pos, new_pos):
+        # Unpack the piece's old and new position
         old_rank, old_file = old_pos
-        old_square = self.board[old_rank][old_file]
         new_rank, new_file = new_pos
-        
-        white = True if self.board[old_rank][old_file].isupper() else False
 
-        # If pawn took with en passant or can promote
+        # Symbol representing the piece that is moving
+        old_square = self.board[old_rank][old_file]
+        # Symbol representing the square that is being moved to
+        new_square = self.board[new_rank][new_file]
+        
+
+        # Check if move is en passant or a promotion
         if self.board[old_rank][old_file] == "P" or self.board[old_rank][old_file] == "p":
+
+            # If new position is empty and the file pawn is in is different, move is an en passant
             if self.board[new_rank][new_file] == None and new_file != old_file:
                 self.board[old_rank][new_file] = None
 
-            # If piece can promote
+            # Check for promotion
             elif new_rank == 0:
                 self.board[old_rank][old_file] = None
-                self.white_promote = True
+                self.white_promote = True # Used in ChessMain to update the display and give selection
             elif new_rank == 7:
                 self.board[old_rank][old_file] = None
-                self.black_promote = True
-
-        if white and "K" in self.can_castle:
-            if self.board[old_rank][old_file] == "K":
-                self.castling_move(old_rank, old_file, new_file)
-                self.can_castle = self.can_castle.replace("K", "")
-        if white and "Q" in self.can_castle:
-            if self.board[old_rank][old_file] == "K":
-                self.castling_move(old_rank, old_file, new_file)
-                self.can_castle = self.can_castle.replace("Q", "")
-        if not white and "k" in self.can_castle:
-            if self.board[old_rank][old_file] == "k":
-                self.castling_move(old_rank, old_file, new_file)
-                self.can_castle = self.can_castle.replace("k", "")
-        if not white and "q" in self.can_castle:
-            if self.board[old_rank][old_file] == "k":
-                self.castling_move(old_rank, old_file, new_file)
-                self.can_castle = self.can_castle.replace("q", "")
-
+                self.black_promote = True # Used in ChessMain to update the display and give selection
         
-        # If rook moved (cannot castle on that side)
-        if (white and ("K" in self.can_castle or "Q" in self.can_castle)) or (not white and ("k" in self.can_castle or "q" in self.can_castle)):
+        # Check if move is castling
+        elif self.board[old_rank][old_file] == "K":
+
+            if "K" in self.can_castle:
+                # updates the rooks position
+                self.castling_move(old_rank, old_file, new_file)
+                self.can_castle = self.can_castle.replace("KQ", "")
+
+            elif "Q" in self.can_castle:
+                # updates the rooks position
+                self.castling_move(old_rank, old_file, new_file)
+                self.can_castle = self.can_castle.replace("KQ", "")
+
+        elif self.board[old_rank][old_file] == "k":
+            # Checks if black king can kingside castle
+            if "k" in self.can_castle:
+                # updates the rooks position
+                self.castling_move(old_rank, old_file, new_file)
+                self.can_castle = self.can_castle.replace("kq", "")
+            elif "q" in self.can_castle:
+                # updates the rooks position
+                self.castling_move(old_rank, old_file, new_file)
+                self.can_castle = self.can_castle.replace("kq", "")
+       
+        # Checks if rook moved (cannot castle on that side)
+        if (self.white_to_move and ("K" in self.can_castle or "Q" in self.can_castle)) or (not self.white_to_move and ("k" in self.can_castle or "q" in self.can_castle)):
             if self.board[old_rank][old_file] == "R" or self.board[old_rank][old_file] == "r":
                 if old_pos == (0, 0):
                     self.can_castle = self.can_castle.replace("q", '')
@@ -175,16 +166,18 @@ class GameState():
                 elif old_pos == (7, 7):
                     self.can_castle = self.can_castle.replace("K", '')
         
+        # Makes the given move
         self.board[new_rank][new_file] = self.board[old_rank][old_file]
         self.board[old_rank][old_file] = None
 
-        if self.king_in_check(white):
+        # If player's king is in check after that player moved, undo the move and ask for a new move
+        if self.king_in_check(self.white_to_move):
             self.board[old_rank][old_file] = old_square
             self.board[old_rank][old_file] = self.board[new_rank][new_file]
-            self.board[new_rank][new_file] = None
+            self.board[new_rank][new_file] = new_square
             return
         
-        # Add position to the positions dict
+        # Add position to the positions dictionary
         fen_pos = self.board_to_fen()
         if fen_pos not in self.positions:
             self.positions[self.board_to_fen()] = 1
@@ -196,6 +189,7 @@ class GameState():
     
 
     def castling_move(self, old_rank, old_file, new_file):
+        # If king castled king side
         if old_file - new_file == -2:
             self.board[old_rank][old_file + 1] = self.board[old_rank][7]
             self.board[old_rank][7] = None
@@ -206,10 +200,12 @@ class GameState():
 
     
     def generate_moves(self, piece_pos, danger=False):
-
+        """
+        Generates the moves for a given piece
+        if danger is True, the function is being called to check for squares under attack, so forward pawn moves should be excluded
+        """
         rank, file = piece_pos
         piece_type = self.board[rank][file]
-        moves = []
 
         if piece_type == "p" or piece_type == "P":
             moves = self.generate_pawn_moves(piece_pos, piece_type, danger)
@@ -233,188 +229,98 @@ class GameState():
     
 
     def generate_pawn_moves(self, piece_pos, piece_type, danger=False):
+        """ Pawn's Moves:
+        1 square forward if it is empty and 2 squares forward if the 2 squares infront are empty and it is the pawns first move
+        Pawns can capture on diagonals and canpture with en passant (diagonally if the enemy pawn moved 2 squares in the last move)
+        If danger is True, the function is being called to check for squares under attack, so forward pawn moves should be excluded
+        """
         rank, file = piece_pos
-        moves = []
+        moves = [] # Store the piece's possible moves
         last_move = self.last_move # stored as [(x,y), piece_type, (x,y)]
 
-        # Generate white pawn moves
+        # White moves -1 squares, black moves 1 square
+        i = -1 if self.white_to_move else 1
+
         # If danger is false, normal pawn moves are calculated
+        # Pawn can move 1 square forward if it is empty and inbounds
         if not danger:
-            if piece_type.isupper():
-                # Pawn can move 1 square forward if it is empty and inbounds
-                if rank - 1 >= 0:
-                    if self.board[rank - 1][file] == None:
-                        moves.append((rank - 1, file))
+            if 7 >= rank + i >= 0:
+                if self.board[rank + i][file] == None:
+                    moves.append((rank + i, file))
 
-                # Pawn can move 2 squares forward if it hasn't moved and 2 squares infront are empty
-                if rank == 6:
-                    if self.board[rank - 1][file] == None and self.board[rank - 2][file] == None:
-                        moves.append((rank - 2, file))
+        # Pawn can move 2 squares forward if it hasn't moved and 2 squares infront are empty
+        if not danger:
+            if (self.white_to_move and rank == 6) or (not self.white_to_move and rank == 1):
+                if self.board[rank + i][file] == None and self.board[rank + i * 2][file] == None:
+                    moves.append((rank + i * 2, file))
 
-                # Pawn can take on diagonals if it is inbounds
-                if rank - 1 >= 0 and file - 1 >= 0:
-                    if self.board[rank - 1][file - 1] is not None and self.board[rank - 1][file - 1].islower():
-                        moves.append((rank - 1, file - 1))
-                        
-                if rank - 1 >= 0 and file + 1 <= 7:
-                    if self.board[rank - 1][file + 1] is not None and self.board[rank - 1][file + 1].islower():
-                        moves.append((rank - 1, file + 1))
+        # Pawn can take on diagonals if it is inbounds
+        for j in [-1, 1]:
+            if 7 >= rank + i >= 0 and 7 >= file + j >= 0:
+                if self.board[rank + i][file + j] is not None and not self.piece_matches_turn(rank + i, file + j):
+                    moves.append((rank + i, file + j))
 
-                # Can en-passant if: last move was made by a pawn
-                if last_move is not None:
-                    if last_move[1] == 'p':
-                        old_rank, old_file = last_move[0]
-                        new_rank, new_file = last_move[2]
+        # Can en-passant if: 
+        # last move was made by a pawn
+        if last_move is not None:
+            if last_move[1] in 'Pp':
+                old_rank, old_file = last_move[0]
+                new_rank, new_file = last_move[2]
 
-                        # If the pawn moved 2 square
-                        if old_rank - new_rank == -2:
-                            # If the pawn moving is on the right of that pawn
-                            if file + 1 <= 7:
-                                if self.board[rank][file + 1] == self.board[new_rank][new_file]:
-                                    moves.append((rank - 1, new_file))
+                # If the pawn moved 2 square
+                if (old_rank - new_rank) ** 2 == 4:
 
-                            # If the pawn moving is on the left of that pawn
-                            if file - 1 >= 0:
-                                if self.board[rank][file - 1] == self.board[new_rank][new_file]:
-                                    moves.append((rank - 1, new_file))
+                    # If the pawn moving is on the right of that pawn
+                    if file + 1 <= 7:
+                        if self.board[rank][file + 1] == self.board[new_rank][new_file]:
+                            moves.append((rank + i, new_file))
 
-
-            # Generate black pawn moves
-            else:
-                # Pawn can move 1 square forward if it is empty and inbounds
-                if rank + 1 <= 7:
-                    if self.board[rank + 1][file] == None:
-                        moves.append((rank + 1, file))
-
-                # Pawn can move 2 squares forward if it hasn't moved and 2 squares infront are empty
-                if rank == 1:
-                    if self.board[rank + 1][file] == None and self.board[rank + 2][file] == None:
-                        moves.append((rank + 2, file))
-
-                # Pawn can take on diagonals if it is inbounds
-                if rank + 1 <= 7 and file - 1 >= 0:
-                    if self.board[rank + 1][file - 1] is not None and self.board[rank + 1][file - 1].isupper():
-                        moves.append((rank + 1, file - 1))
-                        
-                if rank + 1 <= 7 and file + 1 <= 7:
-                    if self.board[rank  +1][file + 1] is not None and self.board[rank + 1][file + 1].isupper():
-                        moves.append((rank + 1, file + 1))
-
-                # Can en-passant if: last move was made by a pawn
-                if last_move is not None:
-                    if last_move[1] == 'P':
-                        old_rank, old_file = last_move[0]
-                        new_rank, new_file = last_move[2]
-
-                        # If the pawn moved 2 square
-                        if old_rank - new_rank == 2:
-                            # If the pawn moving is on the right of that pawn
-                            if file + 1 <= 7:
-                                if self.board[rank][file + 1] == self.board[new_rank][new_file]:
-                                    moves.append((rank + 1, file + 1))
-
-                            # If the pawn moving is on the left of that pawn
-                            if file - 1 >= 0:
-                                if self.board[rank][file - 1] == self.board[new_rank][new_file]:
-                                    moves.append((rank + 1, file - 1))
-
-        # Calculates pawn attacking moves
-        # Danger is true
-        # Used to check for danger squares for the opposing king                        
-        else:
-            # Pawn can take on diagonals if it is inbounds
-            if piece_type.isupper():
-                if rank - 1 >= 0 and file - 1 >= 0:
-                    moves.append((rank - 1, file - 1))
-                        
-                if rank - 1 >= 0 and file + 1 <= 7:
-                    moves.append((rank - 1, file + 1))
-
-                # Can en-passant if: last move was made by a pawn
-                if last_move is not None:
-                    if last_move[1] == 'p':
-                        old_rank, old_file = last_move[0]
-                        new_rank, new_file = last_move[2]
-
-                        # If the pawn moved 2 square
-                        if old_rank - new_rank == -2:
-                            # If the pawn moving is on the right of that pawn
-                            if file + 1 <= 7:
-                                if self.board[rank][file + 1] == self.board[new_rank][new_file]:
-                                    moves.append((rank - 1, new_file))
-
-                            # If the pawn moving is on the left of that pawn
-                            if file - 1 >= 0:
-                                if self.board[rank][file - 1] == self.board[new_rank][new_file]:
-                                    moves.append((rank - 1, new_file))
-            if piece_type.islower():
-                # Pawn can take on diagonals if it is inbounds
-                if rank + 1 <= 7 and file - 1 >= 0:
-                    moves.append((rank + 1, file - 1))
-                        
-                if rank + 1 <= 7 and file + 1 <= 7:
-                    moves.append((rank + 1, file + 1))
-
-                # Can en-passant if: last move was made by a pawn
-                if last_move is not None:
-                    if last_move[1] == 'P':
-                        old_rank, old_file = last_move[0]
-                        new_rank, new_file = last_move[2]
-
-                        # If the pawn moved 2 square
-                        if old_rank - new_rank == 2:
-                            # If the pawn moving is on the right of that pawn
-                            if file + 1 <= 7:
-                                if self.board[rank][file + 1] == self.board[new_rank][new_file]:
-                                    moves.append((rank + 1, file + 1))
-
-                            # If the pawn moving is on the left of that pawn
-                            if file - 1 >= 0:
-                                if self.board[rank][file - 1] == self.board[new_rank][new_file]:
-                                    moves.append((rank + 1, file - 1))
+                    # If the pawn moving is on the left of that pawn
+                    if file - 1 >= 0:
+                        if self.board[rank][file - 1] == self.board[new_rank][new_file]:
+                            moves.append((rank + i, new_file))
 
         return moves
     
 
     def generate_rook_moves(self, piece_pos, piece_type):
         
-            """ Rook's Moves:
-            Check column/row until an obstruction is encountered.
-            If the obstruction is an opponent's piece, include it as a valid move (capture).
-            """
-            moves = []
-            # Possible standard rook moves
-            possible_moves = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-            # Rook is white if variable is true, else black
-            white = True if piece_type.isupper() else False
+        """ Rook's Moves:
+        Check column/row until an obstruction is encountered.
+        If the obstruction is an opponent's piece, include it as a valid move (capture).
+        """
+        moves = []
+        possible_moves = [(-1, 0), (1, 0), (0, -1), (0, 1)] # Possible standard rook moves
+        # Rook is white if variable is true, else black
+        white = True if piece_type.isupper() else False
 
-            # Loop through possible moves until an enemy or boundry is found
-            for i, j in possible_moves:
-                rank, file = piece_pos
-                while True:
-                    rank += i
-                    file += j
-                    if 0 <= rank < 8 and 0 <= file < 8:
+        # For each standard move, increment by the move until an enemy, ally, or boundry is reached
+        # Add the move to the moves list (including capture if piece is an enemy) then reset the peice's position
+        for i, j in possible_moves:
+            rank, file = piece_pos
+            while True:
+                rank += i
+                file += j
+                if 0 <= rank < 8 and 0 <= file < 8:
 
-                        # If a piece is in the way
-                        if self.board[rank][file] is not None:
-                            
-                            # Add move if piece is opposite color
-                            if white and self.board[rank][file].islower():
-                                moves.append((rank, file))
-                            elif not white and self.board[rank][file].isupper():
-                                moves.append((rank, file))
-                            break
-
-                        # If no piece is in the way append move
-                        else:
+                    # If a piece is in the way
+                    if self.board[rank][file] is not None:
+                        
+                        # Add move if piece is an enemy piece
+                        if not self.piece_matches_turn(rank, file):
                             moves.append((rank, file))
-
-                    # Edge of the board is reached
-                    else:
+                        # Enemy/ally piece is reached
                         break
 
-            return moves        
+                    # If no piece is in the way append move
+                    else:
+                        moves.append((rank, file))
+
+                # Edge of the board is reached
+                else:
+                    break
+
+        return moves        
     
     def generate_knight_moves(self, piece_pos, piece_type):
         """ 
@@ -423,8 +329,6 @@ class GameState():
         moves = []
         # Possible standard horse moves
         possible_moves = [(-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1)]
-        # Knight is white if variable is true, else black
-        white = True if piece_type.isupper() else False
 
         # Loop through possible moves
         # If destination is empty or an enemy piece, add move
@@ -433,9 +337,11 @@ class GameState():
             rank += i
             file += j
             if 0 <= rank < 8 and 0 <= file < 8:
+                # If square is empty, append move
                 if self.board[rank][file] is None:
                     moves.append((rank, file))
-                elif (white and self.board[rank][file].islower()) or (not white and self.board[rank][file].isupper()):
+                # If enemy on square, append move
+                elif not self.piece_matches_turn(rank, file):
                     moves.append((rank, file))
 
         return moves
@@ -449,10 +355,9 @@ class GameState():
         moves = []
         # Possible standard bishop moves
         possible_moves = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
-        # Bishop is white if variable is true, else black
-        white = True if piece_type.isupper() else False
 
-        # Loop through possible moves until an enemy or boundry is found
+        # For each standard move, increment by the move until an enemy, ally, or boundry is reached
+        # Add the move to the moves list (including capture if piece is an enemy) then reset the peice's position
         for i, j in possible_moves:
             rank, file = piece_pos
             while True:
@@ -462,16 +367,16 @@ class GameState():
                     if self.board[rank][file] is not None:
 
                         # Add move if piece is opposite color
-                        if white and self.board[rank][file].islower():
+                        if not self.piece_matches_turn(rank, file):
                             moves.append((rank, file))
-                        elif not white and self.board[rank][file].isupper():
-                            moves.append((rank, file))
-
+                        # Enemy/ally piece is reached
                         break
 
+                    # If no piece is in the way append move        
                     else:
                         moves.append((rank, file))
 
+                # Edge of the board is reached
                 else:
                     break
 
@@ -480,17 +385,17 @@ class GameState():
     
     def generate_queen_moves(self, piece_pos, piece_type):
         """ 
-        Check position after move is in bounds and is not occupied by another piece
+        Calculates and returns all possible moves for a queen on the chessboard.
+        ueens can move in any direction (horizontally, vertically, or diagonally) until they
+        encounter an obstacle (another piece or the edge of the board)
         """
         moves = []
 
         # Possible standard queen moves
         possible_moves = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
 
-        # Queen is white if variable is true, else black
-        white = True if piece_type.isupper() else False
-
-        # Loop through possible moves until an enemy or boundry is found
+        # For each standard move, increment by the move until an enemy, ally, or boundry is reached
+        # Add the move to the moves list (including capture if piece is an enemy) then reset the peice's position
         for i, j in possible_moves:
             rank, file = piece_pos
             while True:
@@ -500,16 +405,16 @@ class GameState():
                     if self.board[rank][file] is not None:
 
                         # Add move if piece is opposite color
-                        if white and self.board[rank][file].islower():
+                        if not self.piece_matches_turn(rank, file):
                             moves.append((rank, file))
-                        elif not white and self.board[rank][file].isupper():
-                            moves.append((rank, file))
-
+                        # Enemy/ally piece is reached
                         break
-
+                    
+                    # Square is empty
                     else:
                         moves.append((rank, file))
 
+                # Boundry is reached
                 else:
                     break
 
@@ -517,131 +422,127 @@ class GameState():
     
     def generate_king_moves(self, piece_pos, piece_type):
         """ 
-        Check position after move is in bounds and is not occupied by another piece
+        King can move 1 square in any direction if they are not under attack
+        King can castle (move 2 square either direction and the rook jumps to the opposite side of the king)
         """
         moves = []
 
         # Possible standard queen moves
         possible_moves = [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
 
-        white = True if piece_type.isupper() else False
+        tic = time.perf_counter()
+        danger_squares = self.find_danger_squares(self.white_to_move, piece_pos)
+        toc = time.perf_counter()
+        print(f"Found danger squares in {toc - tic:0.6f} seconds")
 
-        danger_squares = self.find_danger_squares(white)
-
+        # Make each standard move and append it if square is an enemy or empty
         for i, j in possible_moves:
             rank, file = piece_pos
             rank += i
             file += j
 
             if 0 <= rank < 8 and 0 <= file < 8:
-                if self.board[rank][file] is not None:
-                    # Add move if piece is opposite color
-                    if white and self.board[rank][file].islower():
-                        if (rank, file) not in danger_squares:
-                            moves.append((rank, file))
-
-                    elif not white and self.board[rank][file].isupper():
-                        if (rank, file) not in danger_squares:
-                            moves.append((rank, file))
-
-                else:
+                # If square is an enemy or is empty, append move
+                if self.board[rank][file] is None or not self.piece_matches_turn(rank, file):
                     if (rank, file) not in danger_squares:
-                        moves.append((rank, file))
+                        moves.append((rank, file)) 
 
-            rank, file = piece_pos
+        rank, file = piece_pos
 
-        if white and "K" in self.can_castle:
+        # Check if king can king side castle
+        if (self.white_to_move and "K" in self.can_castle) or (not self.white_to_move and "k" in self.can_castle):
+
             if self.board[rank][file + 1] == None and self.board[rank][file + 2] == None:
+
+                # Cannot castle if either of the 2 squares on the right are under attack
                 if (rank, file + 2) not in danger_squares and (rank, file + 1) not in danger_squares:
                     moves.append((rank, file + 2))
 
-        if white and "Q" in self.can_castle:
+        # Check if king can queen side castle
+        if (self.white_to_move and "Q" in self.can_castle) or (not self.white_to_move and "q" in self.can_castle):
+
             if self.board[rank][file - 1] == None and self.board[rank][file - 2] == None and self.board[rank][file - 3] == None:
+
+                # Check if king can kingside castle
                 if (rank, file - 2) not in danger_squares and (rank, file - 1) not in danger_squares:
                     moves.append((rank, file - 2))
 
-        if not white and "k" in self.can_castle:
-            if self.board[rank][file + 1] == None and self.board[rank][file + 2] == None:
-                if (rank, file + 2) not in danger_squares and (rank, file + 1) not in danger_squares:
-                    moves.append((rank, file + 2))
-
-        if not white and "q" in self.can_castle:
-            if self.board[rank][file - 1] == None and self.board[rank][file - 2] == None and self.board[rank][file - 3] == None:
-                if (rank, file - 2) not in danger_squares and (rank, file - 1) not in danger_squares:
-                    moves.append((rank, file - 2))
-
-        
         return moves
 
 
-    def find_danger_squares(self, white, save_king=False):
-        
+    def find_danger_squares(self, white, king_pos, save_king=False):
         # Find all squares that are under attack
         danger_squares = []
 
-        king_pos = self.find_king(white)
         king_r, king_f = king_pos
+
+        # Removes the king when generating moves to accurately caputure danger squares
         king = self.board[king_r][king_f]
         self.board[king_r][king_f] = None
 
+        # Loops through every square in the board
         for r, rank in enumerate(self.board):
             for f, piece in enumerate(rank):
-                if self.board[r][f] is not None:
+                # Generate only enemy and non-king moves
+                if piece is not None:
                     if (white and piece.islower()) or (not white and piece.isupper()):
                         if piece != "K" and piece != "k":
 
                             danger_moves = self.generate_moves((r,f), True)
 
+                            # Add unique enemy moves to danger squares
                             for ele in danger_moves:
                                 if ele not in danger_squares:
                                     danger_squares.append(ele)
 
+        # Place the king back on the board
         self.board[king_r][king_f] = king
 
+        # If save_king is true, return the king position to help with efficiency
         if save_king:
             return danger_squares, king_pos
         
         return danger_squares
 
 
-
     def king_in_check(self, white):
+        king_pos = self.find_king(white)
 
-        # Find all squares that are under attack
-        is_check = False
+        danger_squares = self.find_danger_squares(white, king_pos)
 
-        danger_squares, king_pos = self.find_danger_squares(white, True)
-
-        # If king is under attack return True
+        # If king is in a square that is under attack return True
         if king_pos in danger_squares:
-            is_check = True
+            return True
 
-        return is_check
+        return False
     
-    def king_in_checkmate(self, white):
-        is_checkmate = True
 
-        king = self.find_king(white)
+    def king_in_checkmate(self, white):
+        """
+        For every piece that is the correct color and not the king,
+        Generate their moves, make that move in the temporary board
+        If the move takes the king out of check, it is not checkmate
+        If no moves take the king out of check, it is checkmate
+        """
 
         # Create a temporary board and loop through pieces
         for r, rank in enumerate(self.board):
             for f, piece in enumerate(rank):
                 if self.board[r][f] is not None:
-                    """ For every piece that is not the king and the correct color,
-                    Generate their moves, make that move in the temporary board
-                    If the move takes the king out of check, it is not checkmate
-                    If no moves take the king out of check, it is checkmate
-                    """
-                    if (white and piece.isupper()) or (not white and piece.islower()):
+                    if self.piece_matches_turn(r,f):
+                        # Generate the ally piece's moves
                         moves = self.generate_moves((r,f))
+
                         for move in moves:
+                            # Make a deep copy of the game state
                             temp_game_state = cp.deepcopy(self)
                             temp_game_state.make_move((r, f), move)
-                            if not temp_game_state.king_in_check(white):
-                                is_checkmate = False
-                                break
 
-        return is_checkmate
+                            # If the king is not in check after the move in the temp game state, it is not checkmate
+                            if not temp_game_state.king_in_check(white):
+                                return False
+
+        return True
         
     
     def find_king(self, white):
@@ -658,17 +559,16 @@ class GameState():
                 for f in range(8):
                     if self.board[r][f] == 'k':
                         return (r, f)
-                    
+                                        
 
     def is_stalemate(self, white):
-
-        for r in range(8):
-            if white:
-                    r = -1 - r
+        # Loop through the board
+        for r in range(8):    
             for f, piece in enumerate(self.board[r]):
                 if piece is not None:
-                    if (white and piece.isupper()) or (not white and piece.islower()):
-                        if self.generate_moves((r, f), white):
+                    if self.piece_matches_turn(r,f):
+                        # If any ally has moves, it is not stalemate
+                        if self.generate_moves((r, f)):
                             return False
 
         return True
